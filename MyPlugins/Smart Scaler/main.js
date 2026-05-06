@@ -23,80 +23,90 @@ export class SmartScaler extends CoreService {
 
     this.guards.push(
       contextActionRegistry.registerAction((context) => {
+        const action = new Editor.ContextAction();
+        action.id = 'com.sarperozkiziltan.smartscaler.apply';
+        action.caption = 'Smart Scale';
+        action.description = 'Set ScreenTransform anchors based on texture width / 720';
+
+        // Determine valid scene-object targets (if any). Asset-browser
+        // contexts and other non-scene contexts produce an empty list.
+        let sceneObjects = [];
         try {
-          if (!context.selection || context.selection.length === 0) {
+          if (
+            context.selection &&
+            context.selection.length > 0 &&
+            !('asset' in context.selection[0]) &&
+            !('path' in context.selection[0]) &&
+            typeof context.selection[0].getComponent === 'function'
+          ) {
+            sceneObjects = context.selection.filter(
+              obj => typeof obj.getComponent === 'function'
+            );
+          }
+        } catch (e) {
+          sceneObjects = [];
+        }
+
+        action.apply = () => {
+          if (sceneObjects.length === 0) {
+            console.log('Smart Scaler: Not applicable — please right-click a scene object.');
             return;
           }
-          if (typeof context.selection[0].getComponent !== 'function') {
-            return;
-          }
 
-          const sceneObjects = context.selection.filter(
-            obj => typeof obj.getComponent === 'function'
-          );
+          const assets = this.model.project.assetManager.assets;
+          let applied = 0;
 
-          const action = new Editor.ContextAction();
-          action.id = 'com.sarperozkiziltan.smartscaler.apply';
-          action.caption = 'Smart Scale';
-          action.description = 'Set ScreenTransform anchors based on texture width / 720';
-          action.apply = () => {
-            const assets = this.model.project.assetManager.assets;
-            let applied = 0;
-
-            for (const sceneObject of sceneObjects) {
-              const screenTransform = sceneObject.getComponent('ScreenTransform');
-              if (!screenTransform) {
-                console.log(`Smart Scaler: "${sceneObject.name}" has no ScreenTransform — skipped.`);
-                continue;
-              }
-
-              const image = sceneObject.getComponent('Image');
-              if (!image) {
-                console.log(`Smart Scaler: "${sceneObject.name}" has no Image component — skipped.`);
-                continue;
-              }
-
-              const material = image.mainMaterial;
-              if (!material || !material.passInfos || material.passInfos.length === 0) {
-                console.log(`Smart Scaler: "${sceneObject.name}" has no material or passes — skipped.`);
-                continue;
-              }
-
-              const texParam = material.passInfos[0]['baseTex'];
-              if (!texParam) {
-                console.log(`Smart Scaler: "${sceneObject.name}" has no baseTex — skipped.`);
-                continue;
-              }
-
-              const textureAsset = assets.find(a => String(a.id) === String(texParam.id));
-              if (!textureAsset) {
-                console.log(`Smart Scaler: "${sceneObject.name}" texture asset not found — skipped.`);
-                continue;
-              }
-
-              const width = textureAsset.fileInfo ? textureAsset.fileInfo.width : undefined;
-              if (!width) {
-                console.log(`Smart Scaler: "${sceneObject.name}" texture width unreadable — skipped.`);
-                continue;
-              }
-
-              const value = width / 720;
-              const anchor = screenTransform.anchor;
-              anchor.left = -value;
-              anchor.right = value;
-              screenTransform.anchor = anchor;
-
-              console.log(`Smart Scaler: Applied — "${sceneObject.name}", texture="${textureAsset.name}", width=${width}px, left=${-value}, right=${value}`);
-              applied++;
+          for (const sceneObject of sceneObjects) {
+            const screenTransform = sceneObject.getComponent('ScreenTransform');
+            if (!screenTransform) {
+              console.log(`Smart Scaler: "${sceneObject.name}" has no ScreenTransform — skipped.`);
+              continue;
             }
 
-            console.log(`Smart Scaler: Done — ${applied}/${sceneObjects.length} object(s) updated.`);
-          };
+            const image = sceneObject.getComponent('Image');
+            if (!image) {
+              console.log(`Smart Scaler: "${sceneObject.name}" has no Image component — skipped.`);
+              continue;
+            }
 
-          return action;
-        } catch (e) {
-          return;
-        }
+            const material = image.mainMaterial;
+            if (!material || !material.passInfos || material.passInfos.length === 0) {
+              console.log(`Smart Scaler: "${sceneObject.name}" has no material or passes — skipped.`);
+              continue;
+            }
+
+            const texParam = material.passInfos[0]['baseTex'];
+            if (!texParam) {
+              console.log(`Smart Scaler: "${sceneObject.name}" has no baseTex — skipped.`);
+              continue;
+            }
+
+            const textureAsset = assets.find(a => String(a.id) === String(texParam.id));
+            if (!textureAsset) {
+              console.log(`Smart Scaler: "${sceneObject.name}" texture asset not found — skipped.`);
+              continue;
+            }
+
+            const width = textureAsset.fileInfo ? textureAsset.fileInfo.width : undefined;
+            if (!width) {
+              console.log(`Smart Scaler: "${sceneObject.name}" texture width unreadable — skipped.`);
+              continue;
+            }
+
+            const value = width / 720;
+            const anchor = screenTransform.anchor;
+            anchor.left = -value;
+            anchor.right = value;
+            screenTransform.anchor = anchor;
+
+            console.log(`Smart Scaler: Applied — "${sceneObject.name}", texture="${textureAsset.name}", width=${width}px, left=${(-value).toFixed(4)}, right=${value.toFixed(4)}`);
+            applied++;
+          }
+
+          console.log(`Smart Scaler: Done — ${applied}/${sceneObjects.length} object(s) updated.`);
+        };
+
+        return action;
       })
     );
   }
